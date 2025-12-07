@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint-and-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install basic tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8
+      - name: Lint (flake8)
+        run: |
+          # run lint only on python files in the main project dir
+          flake8 01_WSI_inference_OPENSLIDE_QC || true
+      - name: Syntax check
+        run: |
+          python -m compileall -q .
