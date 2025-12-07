@@ -20,6 +20,22 @@ const api = {
 
 contextBridge.exposeInMainWorld('pathInsight', api);
 
+// allow renderer to subscribe to pipeline logs and events
+contextBridge.exposeInMainWorld('pathInsightEvents', {
+  onLog: (cb: (line: string) => void) => {
+    ipcRenderer.on('pathInsight:log', (_e, line) => cb(line));
+  },
+  onStatus: (cb: (status: any) => void) => {
+    ipcRenderer.on('pathInsight:status', (_e, status) => cb(status));
+  },
+});
+
+// Additional helpers to list files in output dir and open folder in OS
+contextBridge.exposeInMainWorld('pathInsightFs', {
+  listDir: async (dirPath: string) => ipcRenderer.invoke('pathInsight:list-output', dirPath),
+  openFolder: async (dirPath: string) => ipcRenderer.invoke('pathInsight:open-output', dirPath),
+});
+
 declare global {
   interface Window {
     pathInsight: typeof api;

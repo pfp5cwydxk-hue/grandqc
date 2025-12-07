@@ -314,3 +314,67 @@ if (app) {
     runDummyPipeline();
   });
 }
+
+// Subscribe to logs and status from preload bridge
+if (window.pathInsightEvents) {
+  window.pathInsightEvents.onLog((line) => {
+    pushLog(line);
+  });
+  window.pathInsightEvents.onStatus(async (status) => {
+    pushLog(`STATUS: ${status.step} - ${status.msg}`);
+    if (status.step === 'done' && status.outputDir) {
+      // show viewer
+      try {
+        const out = status.outputDir as string;
+        // list overlays and maps
+        const mapsDir = `${out}/maps_qc`;
+        const overlaysDir = `${out}/overlays_qc`;
+        const thumbs = [] as string[];
+        try {
+          const resMaps = await (window as any).pathInsightFs.listDir(mapsDir);
+          if (resMaps.ok) {
+            resMaps.files.forEach((f: any) => thumbs.push(f.path));
+          }
+        } catch (e) {}
+        try {
+          const resOv = await (window as any).pathInsightFs.listDir(overlaysDir);
+          if (resOv.ok) {
+            resOv.files.forEach((f: any) => thumbs.push(f.path));
+          }
+        } catch (e) {}
+
+        if (thumbs.length > 0) {
+          // create viewer area
+          const viewerId = 'pipeline-viewer';
+          let viewer = document.getElementById(viewerId);
+          if (!viewer) {
+            viewer = document.createElement('div');
+            viewer.id = viewerId;
+            viewer.className = 'viewer';
+            const container = document.querySelector('.run-box');
+            container?.appendChild(viewer);
+          }
+          viewer.innerHTML = '<h4>Pipeline output</h4><div class="thumbs" id="thumbs"></div><div><button id="open-output">Open output folder</button></div>';
+          const thumbsEl = document.getElementById('thumbs');
+          thumbsEl!.innerHTML = '';
+          thumbs.forEach((p) => {
+            const img = document.createElement('img');
+            img.src = `file://${p}`;
+            img.width = 240;
+            img.style.margin = '8px';
+            thumbsEl!.appendChild(img);
+          });
+
+          const openBtn = document.getElementById('open-output');
+          openBtn?.addEventListener('click', () => {
+            (window as any).pathInsightFs.openFolder(status.outputDir);
+          });
+        } else {
+          pushLog('Geen gegenereerde afbeeldingen gevonden in output folder.');
+        }
+      } catch (err) {
+        pushLog('Fout bij het laden van output: ' + String(err));
+      }
+    }
+  });
+}

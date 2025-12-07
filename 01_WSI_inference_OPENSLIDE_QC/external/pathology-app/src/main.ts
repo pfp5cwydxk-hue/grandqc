@@ -69,11 +69,92 @@ ipcMain.handle('pathInsight:open-slide', async () => {
 });
 
 ipcMain.handle('pathInsight:start-pipeline', async (_event, payload) => {
-  // Placeholder: hook up actual pipeline orchestration here.
-  return {
-    ok: true,
-    slidePath: payload?.slidePath ?? null,
-    startedAt: Date.now(),
-    message: 'Pipeline kickoff stub: plaats je QC/segmentatie call hier.',
-  };
+  const slidePath: string | null = payload?.slidePath ?? null;
+  if (!slidePath) {
+    return { ok: false, slidePath: null, startedAt: Date.now(), message: 'No slide provided' };
+  }
+
+  try {
+    const fs = require('fs');
+    const { spawn } = require('child_process');
+    const os = require('os');
+    const path = require('path');
+    // temporary working dir and repository-level output dir
+    const tmp = path.join(process.cwd(), 'tmp_pipeline_' + Date.now());
+    fs.mkdirSync(tmp, { recursive: true });
+
+    const repoOutputBase = path.join(process.cwd(), '01_WSI_inference_OPENSLIDE_QC', 'output');
+    const outputDir = path.join(repoOutputBase, `pipeline_${Date.now()}`);
+    const slidesIn = path.join(outputDir, 'slides_in');
+    fs.mkdirSync(slidesIn, { recursive: true });
+    fs.mkdirSync(outputDir, { recursive: true });
+    fs.mkdirSync(slidesIn, { recursive: true });
+    fs.mkdirSync(outputDir, { recursive: true });
+
+    // copy selected slide into slides_in
+    const basename = require('path').basename(slidePath);
+    const destSlide = path.join(slidesIn, basename);
+    fs.copyFileSync(slidePath, destSlide);
+
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+
+    const pythonExec = 'python3';
+
+    // helper to run a command and stream logs back to renderer
+    const runCmd = (cmd: string, args: string[]) =>
+      new Promise<void>((resolve, reject) => {
+        const proc = spawn(cmd, args, { cwd: process.cwd(), env: process.env });
+        proc.stdout.on('data', (data: Buffer) => {
+          const line = data.toString();
+          mainWindow.webContents.send('pathInsight:log', line);
+        });
+        proc.stderr.on('data', (data: Buffer) => {
+          const line = data.toString();
+          mainWindow.webContents.send('pathInsight:log', line);
+        });
+        proc.on('close', (code: number) => {
+          if (code === 0) resolve();
+          else reject(new Error(`Process exited with code ${code}`));
+        });
+      });
+
+    // 1) run tissue detection
+    mainWindow.webContents.send('pathInsight:status', { step: 'tissue-detect', msg: 'Starting tissue detection...' });
+    await runCmd(pythonExec, ['01_WSI_inference_OPENSLIDE_QC/wsi_tis_detect.py', '--slide_folder', slidesIn, '--output_dir', outputDir]);
+
+    // 2) run QC pipeline
+    mainWindow.webContents.send('pathInsight:status', { step: 'qc', msg: 'Starting QC pipeline...' });
+    await runCmd(pythonExec, ['01_WSI_inference_OPENSLIDE_QC/main.py', '--slide_folder', slidesIn, '--output_dir', outputDir, '--mpp_model', '1.5', '--create_geojson', 'Y']);
+
+    mainWindow.webContents.send('pathInsight:status', { step: 'done', msg: 'Pipeline finished', outputDir });
+
+    return { ok: true, slidePath, startedAt: Date.now(), message: 'Pipeline finished', outputDir } as any;
+  } catch (err: any) {
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    mainWindow.webContents.send('pathInsight:log', `Pipeline error: ${err?.message || err}`);
+    return { ok: false, slidePath, startedAt: Date.now(), message: String(err) } as any;
+  }
+});
+
+// List files in a directory (used by renderer to show outputs)
+ipcMain.handle('pathInsight:list-output', async (_e, dirPath: string) => {
+  const fs = require('fs');
+  try {
+    const files = fs.readdirSync(dirPath).map((f: string) => ({ name: f, path: require('path').join(dirPath, f) }));
+    return { ok: true, files };
+  } catch (err: any) {
+    return { ok: false, message: String(err) };
+  }
+});
+
+// Open folder in OS
+ipcMain.handle('pathInsight:open-output', async (_e, dirPath: string) => {
+  const { shell } = require('electron');
+  try {
+    // show folder in finder/explorer
+    shell.showItemInFolder(dirPath);
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, message: String(err) };
+  }
 });
