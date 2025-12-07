@@ -126,6 +126,14 @@ ipcMain.handle('pathInsight:start-pipeline', async (_event, payload) => {
     mainWindow.webContents.send('pathInsight:status', { step: 'qc', msg: 'Starting QC pipeline...' });
     await runCmd(pythonExec, ['01_WSI_inference_OPENSLIDE_QC/main.py', '--slide_folder', slidesIn, '--output_dir', outputDir, '--mpp_model', '1.5', '--create_geojson', 'Y']);
 
+      // 3) generate HTML report
+      mainWindow.webContents.send('pathInsight:status', { step: 'report', msg: 'Generating HTML report...' });
+      await runCmd(pythonExec, ['01_WSI_inference_OPENSLIDE_QC/generate_report.py', '--output_dir', outputDir]);
+
+      // 4) generate visual overlays
+      mainWindow.webContents.send('pathInsight:status', { step: 'overlays', msg: 'Creating visual overlays...' });
+      await runCmd(pythonExec, ['01_WSI_inference_OPENSLIDE_QC/generate_overlays.py', '--output_dir', outputDir]);
+
     mainWindow.webContents.send('pathInsight:status', { step: 'done', msg: 'Pipeline finished', outputDir });
 
     return { ok: true, slidePath, startedAt: Date.now(), message: 'Pipeline finished', outputDir } as any;
