@@ -36,6 +36,7 @@ type PathInsightAPI = {
     startedAt: number;
     message: string;
   }>;
+  openReport: (outputDir: string) => Promise<{ ok: boolean; message?: string }>;
 };
 
 declare global {
@@ -354,7 +355,7 @@ if (window.pathInsightEvents) {
             const container = document.querySelector('.run-box');
             container?.appendChild(viewer);
           }
-          viewer.innerHTML = '<h4>Pipeline output</h4><div class="thumbs" id="thumbs"></div><div><button id="open-output">Open output folder</button></div>';
+          viewer.innerHTML = `<h4>Pipeline output</h4><div class="thumbs" id="thumbs"></div><div><button id="open-report" style="margin-right: 8px;">📄 Open Report</button><button id="open-output">📁 Open folder</button></div>`;
           const thumbsEl = document.getElementById('thumbs');
           thumbsEl!.innerHTML = '';
           thumbs.forEach((p) => {
@@ -363,6 +364,14 @@ if (window.pathInsightEvents) {
             img.width = 240;
             img.style.margin = '8px';
             thumbsEl!.appendChild(img);
+          });
+
+          const reportBtn = document.getElementById('open-report');
+          reportBtn?.addEventListener('click', async () => {
+            if (window.pathInsight) {
+              const res = await window.pathInsight.openReport(status.outputDir);
+              if (!res.ok) pushLog('Error opening report: ' + (res.message || 'unknown'));
+            }
           });
 
           const openBtn = document.getElementById('open-output');

@@ -16,6 +16,8 @@ const api = {
     ipcRenderer.invoke('pathInsight:open-slide'),
   startPipeline: async (slidePath: string | null): Promise<PipelineStartResult> =>
     ipcRenderer.invoke('pathInsight:start-pipeline', { slidePath }),
+  openReport: async (outputDir: string): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke('pathInsight:open-report', outputDir),
 };
 
 contextBridge.exposeInMainWorld('pathInsight', api);

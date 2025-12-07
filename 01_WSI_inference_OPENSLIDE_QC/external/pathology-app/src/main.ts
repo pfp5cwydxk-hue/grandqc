@@ -166,3 +166,20 @@ ipcMain.handle('pathInsight:open-output', async (_e, dirPath: string) => {
     return { ok: false, message: String(err) };
   }
 });
+
+// Open report.html in default browser
+ipcMain.handle('pathInsight:open-report', async (_e, outputDir: string) => {
+  const { shell } = require('electron');
+  const path = require('path');
+  const fs = require('fs');
+  try {
+    const reportPath = path.join(outputDir, 'report.html');
+    if (!fs.existsSync(reportPath)) {
+      return { ok: false, message: 'report.html not found' };
+    }
+    await shell.openPath(reportPath);
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, message: String(err) };
+  }
+});
