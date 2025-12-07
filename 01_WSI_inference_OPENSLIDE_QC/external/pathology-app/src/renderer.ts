@@ -37,6 +37,7 @@ type PathInsightAPI = {
     message: string;
   }>;
   openReport: (outputDir: string) => Promise<{ ok: boolean; message?: string }>;
+  openPDF: (outputDir: string) => Promise<{ ok: boolean; message?: string }>;
 };
 
 declare global {
@@ -104,6 +105,36 @@ const pipelineSteps: PipelineStep[] = [
 ];
 
 const app = document.querySelector<HTMLDivElement>('#app');
+
+// Define helpers outside the if block so they're accessible globally
+let logList: HTMLUListElement | null = null;
+let progressBar: HTMLDivElement | null = null;
+let slideStatus: HTMLDivElement | null = null;
+
+const pushLog = (line: string) => {
+  if (!logList) return;
+  const li = document.createElement('li');
+  li.textContent = line;
+  logList.appendChild(li);
+  logList.scrollTop = logList.scrollHeight;
+};
+
+const setProgress = (pct: number) => {
+  if (progressBar) {
+    progressBar.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+  }
+};
+
+const updateStatus = (text: string) => {
+  if (slideStatus) {
+    slideStatus.textContent = text;
+  }
+};
+
+const resetLogs = () => {
+  if (!logList) return;
+  logList.innerHTML = '';
+};
 
 if (app) {
   let selectedSlidePath: string | null = null;
@@ -220,40 +251,15 @@ if (app) {
     </main>
   `;
 
-  const slideStatus = document.querySelector<HTMLDivElement>('#slide-status');
+  slideStatus = document.querySelector<HTMLDivElement>('#slide-status');
   const loadButton = document.querySelector<HTMLButtonElement>('[data-action="load-wsi"]');
   const startButton = document.querySelector<HTMLButtonElement>('[data-action="start-pipeline"]');
-  const progressBar = document.querySelector<HTMLDivElement>('#progress-bar');
-  const logList = document.querySelector<HTMLUListElement>('#log-list');
-
-  const updateStatus = (text: string) => {
-    if (slideStatus) {
-      slideStatus.textContent = text;
-    }
-  };
+  progressBar = document.querySelector<HTMLDivElement>('#progress-bar');
+  logList = document.querySelector<HTMLUListElement>('#log-list');
 
   const clearTimers = () => {
     timers.forEach((id) => window.clearTimeout(id));
     timers = [];
-  };
-
-  const setProgress = (pct: number) => {
-    if (progressBar) {
-      progressBar.style.width = `${Math.min(100, Math.max(0, pct))}%`;
-    }
-  };
-
-  const pushLog = (line: string) => {
-    if (!logList) return;
-    const li = document.createElement('li');
-    li.textContent = line;
-    logList.appendChild(li);
-    logList.scrollTop = logList.scrollHeight;
-  };
-
-  const resetLogs = () => {
-    if (!logList) return;
-    logList.innerHTML = '';
   };
 
   const runDummyPipeline = () => {
@@ -355,7 +361,7 @@ if (window.pathInsightEvents) {
             const container = document.querySelector('.run-box');
             container?.appendChild(viewer);
           }
-          viewer.innerHTML = `<h4>Pipeline output</h4><div class="thumbs" id="thumbs"></div><div><button id="open-report" style="margin-right: 8px;">📄 Open Report</button><button id="open-output">📁 Open folder</button></div>`;
+          viewer.innerHTML = `<h4>Pipeline output</h4><div class="thumbs" id="thumbs"></div><div><button id="open-report" style="margin-right: 8px;">📄 Open Report</button><button id="open-pdf" style="margin-right: 8px;">📋 Open PDF</button><button id="open-output">📁 Open folder</button></div>`;
           const thumbsEl = document.getElementById('thumbs');
           thumbsEl!.innerHTML = '';
           thumbs.forEach((p) => {
@@ -371,6 +377,14 @@ if (window.pathInsightEvents) {
             if (window.pathInsight) {
               const res = await window.pathInsight.openReport(status.outputDir);
               if (!res.ok) pushLog('Error opening report: ' + (res.message || 'unknown'));
+            }
+          });
+
+          const pdfBtn = document.getElementById('open-pdf');
+          pdfBtn?.addEventListener('click', async () => {
+            if (window.pathInsight) {
+              const res = await window.pathInsight.openPDF(status.outputDir);
+              if (!res.ok) pushLog('Error opening PDF: ' + (res.message || 'unknown'));
             }
           });
 
