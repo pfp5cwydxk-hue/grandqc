@@ -9,15 +9,18 @@ import segmentation_models_pytorch as smp
 from wsi_tis_detect_helper_fx import get_preprocessing, make_class_map
 
 
-# DEVICE
-DEVICE = 'cuda'
-'''
-'cuda' - NVIDIA GPU card
-'mps'    - APPLE Silicon
-'''
+# DEVICE - Auto-detect available device
+if torch.cuda.is_available():
+    DEVICE = 'cuda'
+elif torch.backends.mps.is_available():
+    DEVICE = 'mps'
+else:
+    DEVICE = 'cpu'
 
 # MODEL TISSUE DETECTION:
-MODEL_TD_DIR = './models/td/'
+# Get the script directory and construct absolute path to models
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_TD_DIR = os.path.join(SCRIPT_DIR, 'models', 'td')
 MODEL_TD_NAME = 'Tissue_Detection_MPP10.pth'
 MPP_MODEL_TD = 10
 M_P_S_MODEL_TD = 512

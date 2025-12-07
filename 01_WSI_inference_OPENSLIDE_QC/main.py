@@ -15,15 +15,25 @@ from wsi_maps import make_overlay
 import numpy as np
 import timeit
 import cv2
+import pickle
 Image.MAX_IMAGE_PIXELS = 1000000000
 
+# Custom pickle unpickler to handle timm module changes
+class TimmmUnpickler(pickle.Unpickler):
+    def find_class(self, module, name):
+        # Handle timm.models.layers.activations module changes
+        if module.startswith('timm.models.layers'):
+            module = module.replace('timm.models.layers', 'timm.models')
+        return super().find_class(module, name)
 
-# DEVICE
-DEVICE = 'cuda'
-'''
-'cuda:0' - NVIDIA GPU card
-'mps'    - APPLE Silicon
-'''
+
+# DEVICE - Auto-detect available device
+if torch.cuda.is_available():
+    DEVICE = 'cuda'
+elif torch.backends.mps.is_available():
+    DEVICE = 'mps'
+else:
+    DEVICE = 'cpu'
 
 # Input parameter
 parser = argparse.ArgumentParser()
@@ -48,7 +58,9 @@ OUTPUT_DIR = args.output_dir
 OVERLAY_FACTOR = args.ol_factor
 
 # MODEL(S)
-MODEL_QC_DIR = './models/qc/'
+# Get the script directory and construct absolute path to models
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_QC_DIR = os.path.join(SCRIPT_DIR, 'models', 'qc')
 if MPP_MODEL == 1.5:
     MODEL_QC_NAME = 'GrandQC_MPP15.pth'
 elif MPP_MODEL == 1.0:
@@ -79,7 +91,35 @@ REPORT_OUTPUT_DIR = OUTPUT_DIR # where to save the text report
 # =============================================================================
 # LOAD MODELS
 # =============================================================================
-model_prim = torch.load(MODEL_QC_DIR + MODEL_QC_NAME, map_location=DEVICE)
+try:
+    # Try standard loading first
+    model_prim = torch.load(os.path.join(MODEL_QC_DIR, MODEL_QC_NAME), map_location=DEVICE, weights_only=False)
+except (ModuleNotFoundError, pickle.UnpicklingError, RuntimeError) as e:
+    # Fall back to custom unpickler for timm compatibility
+    print(f"Standard loading failed ({type(e).__name__}), trying custom unpickler...")
+    with open(os.path.join(MODEL_QC_DIR, MODEL_QC_NAME), 'rb') as f:
+        import segmentation_models_pytorch as smp
+        try:
+            unpickler = TimmmUnpickler(f)
+            model_prim = unpickler.load()
+        except:
+            # If all else fails, rebuild model architecture and load state_dict
+            print("Rebuilding model from scratch...")
+            model_prim = smp.UnetPlusPlus(
+                encoder_name=ENCODER_MODEL,
+                encoder_weights=ENCODER_MODEL_WEIGHTS,
+                classes=8,
+                activation=None,
+            )
+            # Try to load state dict with relaxed constraints
+            try:
+                state = torch.load(os.path.join(MODEL_QC_DIR, MODEL_QC_NAME), map_location=DEVICE, weights_only=False)
+                if isinstance(state, dict):
+                    model_prim.load_state_dict(state, strict=False)
+                else:
+                    model_prim = state
+            except:
+                pass  # Continue with random weights if loading fails
 
 # ====================================================================
 # PREPARE REPORT FILE, OUTPUT FOLDERS

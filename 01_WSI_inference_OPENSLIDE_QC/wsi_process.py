@@ -82,8 +82,9 @@ def slide_process_single(model, tis_det_map_mpp, slide, patch_n_w_l0, patch_n_h_
                 work_patch = work_patch.resize((m_p_s, m_p_s), Image.Resampling.LANCZOS)
 
                 image_pre = get_preprocessing(work_patch, preprocessing_fn, model_size)
-                x_tensor = torch.from_numpy(image_pre).to(DEVICE).unsqueeze(0)
+                x_tensor = torch.from_numpy(image_pre).float().to(DEVICE).unsqueeze(0)
                 # Inference: ensure no gradients are kept to reduce memory use
+                model.to(DEVICE).float()
                 model.eval()
                 with torch.no_grad():
                     predictions = model.predict(x_tensor)
